@@ -38,7 +38,7 @@ class SpeedMeterService : Service() {
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    private val speedProvider: SpeedProvider = TrafficStatsProvider()
+    private val speedProvider: SpeedProvider by lazy { TrafficStatsProvider(this) }
     private var trackingJob: Job? = null
 
     private var isScreenOn = true
@@ -133,14 +133,15 @@ class SpeedMeterService : Service() {
     }
 
     private fun createNotification(speed: NetworkSpeed): Notification {
-        val content = "↓ ${speed.formattedDownload}  ↑ ${speed.formattedUpload}"
+        val speedLine = "↓ ${speed.formattedDownload}  ↑ ${speed.formattedUpload}"
+        val usageLine = "WiFi: ${speed.formattedDailyWifi} | Mobile: ${speed.formattedDailyMobile}"
         
         val bitmap = createSpeedBitmap(speed)
         val icon = IconCompat.createWithBitmap(bitmap)
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Network Speed")
-            .setContentText(content)
+            .setContentTitle(speedLine)
+            .setContentText(usageLine)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSmallIcon(icon)

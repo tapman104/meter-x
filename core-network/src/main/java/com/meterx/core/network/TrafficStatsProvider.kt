@@ -17,6 +17,7 @@ class TrafficStatsProvider {
     fun getSpeedFlow(): Flow<NetworkSpeed> = flow {
         var previousRx = TrafficStats.getTotalRxBytes()
         var previousTx = TrafficStats.getTotalTxBytes()
+        var lastTimestamp = System.currentTimeMillis()
 
         if (previousRx == TrafficStats.UNSUPPORTED.toLong()) previousRx = 0L
         if (previousTx == TrafficStats.UNSUPPORTED.toLong()) previousTx = 0L
@@ -24,18 +25,18 @@ class TrafficStatsProvider {
         while (true) {
             delay(1000)
 
-            var currentRx = TrafficStats.getTotalRxBytes()
-            var currentTx = TrafficStats.getTotalTxBytes()
+            val currentRx = TrafficStats.getTotalRxBytes().let { if (it == TrafficStats.UNSUPPORTED.toLong()) 0L else it }
+            val currentTx = TrafficStats.getTotalTxBytes().let { if (it == TrafficStats.UNSUPPORTED.toLong()) 0L else it }
+            val currentTimestamp = System.currentTimeMillis()
 
-            if (currentRx == TrafficStats.UNSUPPORTED.toLong()) currentRx = 0L
-            if (currentTx == TrafficStats.UNSUPPORTED.toLong()) currentTx = 0L
-
+            val timeDiffMs = (currentTimestamp - lastTimestamp).coerceAtLeast(1)
+            
             val rxDiff = currentRx - previousRx
             val txDiff = currentTx - previousTx
 
-            // Guard against negative values which could happen if device resets stats
-            val downloadSpeed = if (rxDiff >= 0) rxDiff else 0L
-            val uploadSpeed = if (txDiff >= 0) txDiff else 0L
+            // Calculate bytes per second based on actual time elapsed for better accuracy
+            val downloadSpeed = if (rxDiff >= 0) (rxDiff * 1000 / timeDiffMs) else 0L
+            val uploadSpeed = if (txDiff >= 0) (txDiff * 1000 / timeDiffMs) else 0L
 
             val networkSpeed = NetworkSpeed(
                 downloadSpeedBytes = downloadSpeed,
@@ -48,6 +49,7 @@ class TrafficStatsProvider {
 
             previousRx = currentRx
             previousTx = currentTx
+            lastTimestamp = currentTimestamp
         }
     }
 }

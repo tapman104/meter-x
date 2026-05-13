@@ -11,6 +11,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.os.Build
 import android.os.IBinder
@@ -20,7 +21,6 @@ import com.meterx.core.network.NetworkSpeed
 import com.meterx.core.network.TrafficStatsProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,15 +46,9 @@ class SpeedMeterService : Service() {
         createNotificationChannel()
         
         // Initial speed state
-        val initialSpeed = NetworkSpeed(0, 0, "0 KB/s", "0 KB/s")
-        _speedFlow.value = initialSpeed
-        val notification = createNotification(initialSpeed)
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
-        }
+        _speedFlow.value = ZERO_SPEED
+        val notification = createNotification(ZERO_SPEED, usePlaceholder = true)
+        updateForeground(notification)
         
         startTracking()
     }
@@ -62,33 +56,65 @@ class SpeedMeterService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             stopSelf()
+            return START_NOT_STICKY
         }
+        
+        // Ensure service is in foreground if started again
+        val initialSpeed = _speedFlow.value
+        val notification = createNotification(initialSpeed, usePlaceholder = initialSpeed == ZERO_SPEED)
+        updateForeground(notification)
+        
         return START_STICKY
+    }
+
+    private fun updateForeground(notification: Notification) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     private fun startTracking() {
         serviceScope.launch {
             trafficStatsProvider.getSpeedFlow().collect { speed ->
                 _speedFlow.value = speed
-                notificationManager.notify(NOTIFICATION_ID, createNotification(speed))
+                val notification = createNotification(speed)
+                notificationManager.notify(NOTIFICATION_ID, notification)
             }
         }
     }
 
-    private fun createNotification(speed: NetworkSpeed): Notification {
+    private fun createNotification(speed: NetworkSpeed, usePlaceholder: Boolean = false): Notification {
         val content = "↓ ${speed.formattedDownload}  ↑ ${speed.formattedUpload}"
-        val icon = IconCompat.createWithBitmap(createSpeedBitmap(speed))
-
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Network Speed")
             .setContentText(content)
-            .setSmallIcon(icon)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .build()
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+
+        if (!usePlaceholder) {
+            val bitmap = createSpeedBitmap(speed)
+            val icon = IconCompat.createWithBitmap(bitmap)
+            builder.setSmallIcon(icon)
+        } else {
+            builder.setSmallIcon(R.drawable.ic_speed_placeholder)
+        }
+
+        return builder.build()
     }
 
     private fun createSpeedBitmap(speed: NetworkSpeed): Bitmap {
+        val density = resources.displayMetrics.density
+        val size = 24 // 24dp square
+        val sizePx = (size * density).toInt()
+        val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        
         // Choose dominant speed for the icon
         val dominantSpeed = if (speed.downloadSpeedBytes >= speed.uploadSpeedBytes) {
             speed.formattedDownload
@@ -96,35 +122,63 @@ class SpeedMeterService : Service() {
             speed.formattedUpload
         }
 
-        val (value, unit) = formatForIcon(dominantSpeed)
+        var (value, unit) = formatForIcon(dominantSpeed)
+        
+        // Refine value for icon: remove .0 or round if 2+ digits
+        if (value.contains(".")) {
+            if (value.substringBefore(".").length >= 2 || value.endsWith(".0")) {
+                value = value.substringBefore(".")
+            }
+        }
 
-        val bitmap = Bitmap.createBitmap(80, 50, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
             textAlign = Paint.Align.CENTER
+            // Use condensed bold to match the tall, tight look in the screenshot
+            typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
         }
 
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        paint.textSize = 26f
-        canvas.drawText(value, 40f, 26f, paint)
+        val centerX = sizePx / 2f
+        val bounds = Rect()
 
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        paint.textSize = 20f
-        canvas.drawText(unit, 40f, 46f, paint)
+        // 1. Draw Value (Top Part)
+        var vSize = 14f * density
+        paint.textSize = vSize
+        paint.getTextBounds(value, 0, value.length, bounds)
+        
+        // Scale down if it doesn't fit width
+        while (bounds.width() > sizePx * 0.95f && vSize > 8f * density) {
+            vSize -= 0.5f * density
+            paint.textSize = vSize
+            paint.getTextBounds(value, 0, value.length, bounds)
+        }
+        
+        // Position value baseline
+        canvas.drawText(value, centerX, 13.5f * density, paint)
+
+        // 2. Draw Unit (Bottom Part)
+        var uSize = 7.5f * density
+        paint.textSize = uSize
+        paint.getTextBounds(unit, 0, unit.length, bounds)
+        
+        // Scale down if unit doesn't fit
+        while (bounds.width() > sizePx * 0.95f && uSize > 5f * density) {
+            uSize -= 0.5f * density
+            paint.textSize = uSize
+            paint.getTextBounds(unit, 0, unit.length, bounds)
+        }
+        
+        // Position unit baseline at the bottom
+        canvas.drawText(unit, centerX, 21.5f * density, paint)
 
         return bitmap
     }
 
     private fun formatForIcon(formatted: String): Pair<String, String> {
         val parts = formatted.split(" ")
-        return if (parts.size >= 2) {
-            val value = parts[0]
-            val cleanValue = if (value.endsWith(".0")) value.dropLast(2) else value
-            Pair(cleanValue, parts[1])
-        } else {
-            Pair(formatted, "")
-        }
+        val value = parts.getOrNull(0) ?: "0"
+        val unit = parts.getOrNull(1) ?: "B/s"
+        return Pair(value, unit)
     }
 
     private fun createNotificationChannel() {
@@ -136,6 +190,9 @@ class SpeedMeterService : Service() {
             ).apply {
                 description = "Shows real-time internet speed in the status bar"
                 setShowBadge(false)
+                enableLights(false)
+                enableVibration(false)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
             notificationManager.createNotificationChannel(channel)
         }

@@ -2,6 +2,7 @@ package com.meterx.app
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -14,8 +15,9 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.core.content.ContextCompat
 import com.meterx.app.ui.DashboardScreen
-import com.meterx.core.network.NetworkSpeed
+import com.meterx.core.service.ServiceStateManager
 import com.meterx.core.service.SpeedMeterService
 
 class MainActivity : ComponentActivity() {
@@ -23,48 +25,47 @@ class MainActivity : ComponentActivity() {
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { _ ->
-        // If permission is denied, the foreground service might not show notifications or start
+        // Permission result handled
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
+        checkPermissions()
+        startSpeedService()
 
         setContent {
-            val networkSpeed by SpeedMeterService.speedFlow.collectAsState(
-                initial = NetworkSpeed(0L, 0L, "0 B/s", "0 B/s")
-            )
-            val isServiceRunning by SpeedMeterService.runningFlow.collectAsState(
-                initial = SpeedMeterService.isRunning
-            )
+            // Collect state from ServiceStateManager
+            val networkSpeed by ServiceStateManager.speedFlow.collectAsState()
 
-            // Using dark theme for a modern look as requested
             MaterialTheme(colorScheme = darkColorScheme()) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    DashboardScreen(
-                        networkSpeed = networkSpeed,
-                        isServiceRunning = isServiceRunning,
-                        onToggleService = { start ->
-                            val serviceIntent = Intent(this, SpeedMeterService::class.java)
-                            if (start) {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                    startForegroundService(serviceIntent)
-                                } else {
-                                    startService(serviceIntent)
-                                }
-                            } else {
-                                serviceIntent.action = SpeedMeterService.ACTION_STOP
-                                startService(serviceIntent)
-                            }
-                        }
-                    )
+                    DashboardScreen(networkSpeed = networkSpeed)
                 }
+            }
+        }
+    }
+
+    private fun startSpeedService() {
+        val serviceIntent = Intent(this, SpeedMeterService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+    }
+
+    private fun checkPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
     }

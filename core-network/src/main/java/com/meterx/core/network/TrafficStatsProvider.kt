@@ -12,18 +12,23 @@ data class NetworkSpeed(
     val formattedUpload: String
 )
 
-class TrafficStatsProvider {
+/**
+ * Implementation of [SpeedProvider] using Android's [TrafficStats] API.
+ * Samples system-wide network traffic counters at adaptive intervals.
+ */
+class TrafficStatsProvider : SpeedProvider {
 
-    fun getSpeedFlow(): Flow<NetworkSpeed> = flow {
+    override fun getSpeedFlow(): Flow<NetworkSpeed> = flow {
         var previousRx = TrafficStats.getTotalRxBytes()
         var previousTx = TrafficStats.getTotalTxBytes()
         var lastTimestamp = System.currentTimeMillis()
+        var currentInterval = 1000L
 
         if (previousRx == TrafficStats.UNSUPPORTED.toLong()) previousRx = 0L
         if (previousTx == TrafficStats.UNSUPPORTED.toLong()) previousTx = 0L
 
         while (true) {
-            delay(1000)
+            delay(currentInterval)
 
             val currentRx = TrafficStats.getTotalRxBytes().let { if (it == TrafficStats.UNSUPPORTED.toLong()) 0L else it }
             val currentTx = TrafficStats.getTotalTxBytes().let { if (it == TrafficStats.UNSUPPORTED.toLong()) 0L else it }
@@ -47,9 +52,14 @@ class TrafficStatsProvider {
 
             emit(networkSpeed)
 
+            // Adaptive interval: 1s during active traffic, 2s during idle periods
+            val newInterval = if (downloadSpeed > 0 || uploadSpeed > 0) 1000L else 2000L
+            
+            // Always reset counters to ensure accurate next measurement
             previousRx = currentRx
             previousTx = currentTx
             lastTimestamp = currentTimestamp
+            currentInterval = newInterval
         }
     }
 }

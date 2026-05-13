@@ -2,11 +2,14 @@
 .gradle/
 build/
 **/build/
+gradle-8.4/
+gradle-8.4.zip
 
 # Android Studio / IntelliJ
 .idea/
 *.iml
 *.ipr
+*.iws
 *.iws
 
 # Local configuration
@@ -19,6 +22,7 @@ captures/
 *.ap_
 *.dex
 *.class
+*.hprof
 
 # Logs
 *.log
@@ -33,6 +37,14 @@ Thumbs.db
 **/generated/
 **/intermediates/
 **/outputs/
+**/.kotlin/
+*.snap
 
 # Android Studio specific caches
 .cxx/
+lint/
+report/
+
+# Signing
+*.jks
+*.keystore

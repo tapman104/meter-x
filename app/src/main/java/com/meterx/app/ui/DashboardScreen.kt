@@ -11,11 +11,7 @@ import androidx.compose.ui.unit.sp
 import com.meterx.core.network.NetworkSpeed
 
 @Composable
-fun DashboardScreen(
-    networkSpeed: NetworkSpeed,
-    isServiceRunning: Boolean,
-    onToggleService: (Boolean) -> Unit
-) {
+fun DashboardScreen(networkSpeed: NetworkSpeed) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -30,28 +26,10 @@ fun DashboardScreen(
             color = MaterialTheme.colorScheme.primary
         )
         Spacer(modifier = Modifier.height(48.dp))
-        
+
         SpeedDisplay(title = "Download", speed = networkSpeed.formattedDownload, icon = "↓")
         Spacer(modifier = Modifier.height(24.dp))
         SpeedDisplay(title = "Upload", speed = networkSpeed.formattedUpload, icon = "↑")
-
-        Spacer(modifier = Modifier.height(64.dp))
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = "Background Service",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Switch(
-                checked = isServiceRunning,
-                onCheckedChange = onToggleService
-            )
-        }
     }
 }
 

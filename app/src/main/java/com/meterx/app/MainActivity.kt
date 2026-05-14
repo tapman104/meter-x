@@ -12,12 +12,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import com.meterx.app.ui.DashboardScreen
-import com.meterx.core.service.ServiceStateManager
 import com.meterx.core.service.SpeedMeterService
 
 class MainActivity : ComponentActivity() {

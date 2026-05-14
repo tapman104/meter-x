@@ -13,15 +13,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.meterx.core.network.DailyUsageEntry
 import com.meterx.core.network.UsageHistoryRepository
+import kotlinx.coroutines.delay
+import java.util.Calendar
 
 @Composable
 fun DashboardScreen() {
     val context = LocalContext.current
 
-    // Load history once per composition; refreshed on recomposition from outside.
     val repository = remember { UsageHistoryRepository(context) }
-    val dailyRows: List<DailyUsageEntry> = remember { repository.getHistory(30) }
-    val summaryRows: List<DailyUsageEntry> = remember {
+    var dayRolloverKey by remember { mutableIntStateOf(0) }
+
+    // Refresh table data when the date rolls over while the screen stays open.
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(millisUntilNextMidnight())
+            dayRolloverKey++
+        }
+    }
+
+    val dailyRows: List<DailyUsageEntry> = remember(dayRolloverKey) { repository.getHistory(30) }
+    val summaryRows: List<DailyUsageEntry> = remember(dayRolloverKey) {
         listOf(
             repository.getAggregated(7).copy(date = "Last 7 days"),
             repository.getAggregated(30).copy(date = "Last 30 days"),
@@ -42,8 +53,6 @@ fun DashboardScreen() {
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
         )
-        Spacer(modifier = Modifier.height(32.dp))
-
         Spacer(modifier = Modifier.height(24.dp))
 
         UsageHistoryTable(
@@ -55,4 +64,15 @@ fun DashboardScreen() {
     }
 }
 
+private fun millisUntilNextMidnight(): Long {
+    val now = Calendar.getInstance()
+    val nextMidnight = Calendar.getInstance().apply {
+        add(Calendar.DAY_OF_YEAR, 1)
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    return (nextMidnight.timeInMillis - now.timeInMillis).coerceAtLeast(1L)
+}
 

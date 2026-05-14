@@ -1,6 +1,7 @@
 package com.meterx.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -9,11 +10,35 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.meterx.core.network.DailyUsageEntry
+
+/**
+ * Backward-compatible `HorizontalDivider` shim.
+ * This avoids the deprecated Material3 `Divider` API while staying compatible with the
+ * Compose BOM version currently used by this project.
+ */
+@Composable
+private fun HorizontalDividerCompat(
+    modifier: Modifier = Modifier,
+    thickness: Dp = DividerDefaults.Thickness,
+    color: Color = DividerDefaults.color
+) {
+    Canvas(modifier.fillMaxWidth().height(thickness)) {
+        val y = thickness.toPx() / 2f
+        drawLine(
+            color = color,
+            start = Offset(0f, y),
+            end = Offset(size.width, y),
+            strokeWidth = thickness.toPx()
+        )
+    }
+}
 
 // ─── Formatting helper ────────────────────────────────────────────────────────
 
@@ -140,7 +165,7 @@ private fun RowScope.DataCell(text: String, weight: Float, bold: Boolean = false
 
 @Composable
 fun UsageHistoryDivider() {
-    Divider(
+    HorizontalDividerCompat(
         color = MaterialTheme.colorScheme.outlineVariant,
         thickness = 0.5.dp
     )
@@ -195,7 +220,7 @@ fun UsageHistoryTable(
 
             // Summary rows
             if (summaryRows.isNotEmpty()) {
-                Divider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
+                HorizontalDividerCompat(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
                 summaryRows.forEach { entry ->
                     UsageHistorySummaryRow(entry = entry)
                     UsageHistoryDivider()

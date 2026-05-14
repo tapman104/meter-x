@@ -1,23 +1,40 @@
 package com.meterx.app.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.meterx.core.network.NetworkSpeed
+import com.meterx.core.network.DailyUsageEntry
+import com.meterx.core.network.UsageHistoryRepository
 
 @Composable
-fun DashboardScreen(networkSpeed: NetworkSpeed) {
+fun DashboardScreen() {
+    val context = LocalContext.current
+
+    // Load history once per composition; refreshed on recomposition from outside.
+    val repository = remember { UsageHistoryRepository(context) }
+    val dailyRows: List<DailyUsageEntry> = remember { repository.getHistory(30) }
+    val summaryRows: List<DailyUsageEntry> = remember {
+        listOf(
+            repository.getAggregated(7).copy(date = "Last 7 days"),
+            repository.getAggregated(30).copy(date = "Last 30 days"),
+            repository.getThisMonth()
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = "Internet Meter",
@@ -25,42 +42,17 @@ fun DashboardScreen(networkSpeed: NetworkSpeed) {
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
         )
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(32.dp))
 
-        SpeedDisplay(title = "Download", speed = networkSpeed.formattedDownload, icon = "↓")
         Spacer(modifier = Modifier.height(24.dp))
-        SpeedDisplay(title = "Upload", speed = networkSpeed.formattedUpload, icon = "↑")
+
+        UsageHistoryTable(
+            dailyRows = dailyRows,
+            summaryRows = summaryRows
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
-@Composable
-fun SpeedDisplay(title: String, speed: String, icon: String) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 32.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "$icon $title",
-                fontSize = 18.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = speed,
-                fontSize = 36.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
-    }
-}
+

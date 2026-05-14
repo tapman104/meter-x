@@ -4,10 +4,11 @@ import java.util.Locale
 
 fun formatSpeed(bytes: Long): String {
     return when {
+        bytes <= 0L -> "0 KB/s"
         bytes >= 1024L * 1024L * 1024L -> String.format(Locale.US, "%.1f GB/s", bytes.toDouble() / (1024L * 1024L * 1024L))
         bytes >= 1024L * 1024L -> String.format(Locale.US, "%.1f MB/s", bytes.toDouble() / (1024L * 1024L))
-        bytes >= 1024L -> String.format(Locale.US, "%d KB/s", bytes / 1024L)
-        else -> "0 KB/s"
+        bytes >= 1024L -> String.format(Locale.US, "%.1f KB/s", bytes.toDouble() / 1024.0)
+        else -> String.format(Locale.US, "%d B/s", bytes)
     }
 }
 

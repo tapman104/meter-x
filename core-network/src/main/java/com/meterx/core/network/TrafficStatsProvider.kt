@@ -2,6 +2,7 @@ package com.meterx.core.network
 
 import android.content.Context
 import android.net.TrafficStats
+import android.os.SystemClock
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -25,11 +26,18 @@ class TrafficStatsProvider(context: Context) : SpeedProvider {
 
     private val usageManager = TrafficUsageManager(context)
 
+    init {
+        // Bug2 fix: ensure boot baselines are set before the first getDailyUsage()
+        // call, even when BootReceiver hasn't fired (e.g. sideloaded/debugged builds).
+        usageManager.onBootOrStart()
+    }
+
     override fun getSpeedFlow(): Flow<NetworkSpeed> = flow {
         var previousRx = TrafficStats.getTotalRxBytes()
         var previousTx = TrafficStats.getTotalTxBytes()
-        var lastTimestamp = System.currentTimeMillis()
-        var currentInterval = 1000L
+        var lastTimestamp = SystemClock.elapsedRealtime()
+        // Bug5 fix: fixed 1 s interval — eliminates the one-cycle lag where the
+        // adaptive interval change was applied one iteration late.
 
         if (previousRx == TrafficStats.UNSUPPORTED.toLong()) previousRx = 0L
         if (previousTx == TrafficStats.UNSUPPORTED.toLong()) previousTx = 0L
@@ -37,12 +45,12 @@ class TrafficStatsProvider(context: Context) : SpeedProvider {
         var iterations = 0
 
         while (true) {
-            delay(currentInterval)
+            delay(1000L)
             iterations++
 
             val currentRx = TrafficStats.getTotalRxBytes().let { if (it == TrafficStats.UNSUPPORTED.toLong()) 0L else it }
             val currentTx = TrafficStats.getTotalTxBytes().let { if (it == TrafficStats.UNSUPPORTED.toLong()) 0L else it }
-            val currentTimestamp = System.currentTimeMillis()
+            val currentTimestamp = SystemClock.elapsedRealtime()
 
             val timeDiffMs = (currentTimestamp - lastTimestamp).coerceAtLeast(1)
             
@@ -53,12 +61,13 @@ class TrafficStatsProvider(context: Context) : SpeedProvider {
             val downloadSpeed = if (rxDiff >= 0) (rxDiff * 1000 / timeDiffMs) else 0L
             val uploadSpeed = if (txDiff >= 0) (txDiff * 1000 / timeDiffMs) else 0L
 
-            // Periodically persist usage to avoid data loss on reboot (approx every 15s for better accuracy as requested)
-            if (iterations % 15 == 0) {
-                usageManager.saveUsage()
+            // Bug1+Bug3 fix: use the atomic method every 15 s so save and read
+            // share one TrafficStats snapshot and rotateDayIfNeeded fires only once.
+            val dailyUsage = if (iterations % 15 == 0) {
+                usageManager.saveAndGetDailyUsage()
+            } else {
+                usageManager.getDailyUsage()
             }
-            
-            val dailyUsage = usageManager.getDailyUsage()
 
             val networkSpeed = NetworkSpeed(
                 downloadSpeedBytes = downloadSpeed,
@@ -73,14 +82,9 @@ class TrafficStatsProvider(context: Context) : SpeedProvider {
 
             emit(networkSpeed)
 
-            // Adaptive interval: 1s during active traffic, 2s during idle periods
-            val newInterval = if (downloadSpeed > 0 || uploadSpeed > 0) 1000L else 2000L
-            
-            // Always reset counters to ensure accurate next measurement
             previousRx = currentRx
             previousTx = currentTx
             lastTimestamp = currentTimestamp
-            currentInterval = newInterval
         }
     }
 }

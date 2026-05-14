@@ -35,15 +35,12 @@ class MainActivity : ComponentActivity() {
         startSpeedService()
 
         setContent {
-            // Collect state from ServiceStateManager
-            val networkSpeed by ServiceStateManager.speedFlow.collectAsState()
-
             MaterialTheme(colorScheme = darkColorScheme()) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    DashboardScreen(networkSpeed = networkSpeed)
+                    DashboardScreen()
                 }
             }
         }

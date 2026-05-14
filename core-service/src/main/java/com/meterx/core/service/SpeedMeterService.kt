@@ -29,7 +29,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.launch
+import java.util.Locale
 
 class SpeedMeterService : Service() {
 
@@ -38,8 +38,14 @@ class SpeedMeterService : Service() {
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    private val speedProvider: SpeedProvider by lazy { TrafficStatsProvider(this) }
+    // Initialized in onCreate() after attachBaseContext() so the Context is valid
+    // when TrafficUsageManager calls getSharedPreferences().
+    private lateinit var speedProvider: SpeedProvider
     private var trackingJob: Job? = null
+
+    // Bug4 fix: reuse a single Bitmap across notification updates instead of
+    // allocating a new off-heap object every 1–2 s and leaking the old one.
+    private var notificationBitmap: Bitmap? = null
 
     private var isScreenOn = true
 
@@ -62,6 +68,8 @@ class SpeedMeterService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // Context is now fully initialized — safe to create SpeedProvider.
+        speedProvider = TrafficStatsProvider(this)
         ServiceStateManager.setRunning(true)
         createNotificationChannel()
         
@@ -155,17 +163,19 @@ class SpeedMeterService : Service() {
         val density = resources.displayMetrics.density
         val size = 32 // Increased from 24dp to 32dp for larger, more readable status bar icon
         val sizePx = (size * density).toInt()
-        val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        val existing = notificationBitmap
+        val bitmap = if (existing != null && !existing.isRecycled && existing.width == sizePx) {
+            existing.eraseColor(Color.TRANSPARENT)
+            existing
+        } else {
+            existing?.recycle()
+            Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888).also { notificationBitmap = it }
+        }
         val canvas = Canvas(bitmap)
         
-        // Choose dominant speed for the icon
-        val dominantSpeed = if (speed.downloadSpeedBytes >= speed.uploadSpeedBytes) {
-            speed.formattedDownload
-        } else {
-            speed.formattedUpload
-        }
-
-        var (value, unit) = formatForIcon(dominantSpeed)
+        // Choose dominant speed for the icon using raw bytes for better accuracy.
+        val dominantBytes = maxOf(speed.downloadSpeedBytes, speed.uploadSpeedBytes)
+        var (value, unit) = formatForIcon(dominantBytes)
         
         // Refine value for icon: remove .0 or truncate decimals if value is large (2+ digits)
         if (value.contains(".")) {
@@ -220,22 +230,17 @@ class SpeedMeterService : Service() {
         return bitmap
     }
 
-    private fun formatForIcon(formatted: String): Pair<String, String> {
-        val parts = formatted.split(" ")
-        val value = parts.getOrNull(0) ?: "0"
-        val rawUnit = parts.getOrNull(1) ?: "KB/s"
-        
-        // Ensure we only use allowed units and fallback to KB/s for anything else (like B/s)
-        val unit = when {
-            rawUnit.contains("GB", ignoreCase = true) -> "GB/s"
-            rawUnit.contains("MB", ignoreCase = true) -> "MB/s"
-            else -> "KB/s"
+    private fun formatForIcon(bytesPerSec: Long): Pair<String, String> {
+        val kb = 1024.0
+        val mb = kb * 1024.0
+        val gb = mb * 1024.0
+
+        return when {
+            bytesPerSec <= 0L -> "0" to "KB/s"
+            bytesPerSec >= gb.toLong() -> String.format(Locale.US, "%.1f", bytesPerSec / gb) to "GB/s"
+            bytesPerSec >= mb.toLong() -> String.format(Locale.US, "%.1f", bytesPerSec / mb) to "MB/s"
+            else -> String.format(Locale.US, "%.1f", bytesPerSec / kb) to "KB/s"
         }
-        
-        // If the unit was forced to KB/s (from B/s), ensures value is "0" to satisfy requirement
-        val finalValue = if (unit == "KB/s" && rawUnit.contains("B/s") && !rawUnit.contains("KB/s")) "0" else value
-        
-        return Pair(finalValue, unit)
     }
 
     private fun createNotificationChannel() {
@@ -261,6 +266,8 @@ class SpeedMeterService : Service() {
         
         unregisterReceiver(screenReceiver)
         serviceScope.cancel()
+        notificationBitmap?.recycle()
+        notificationBitmap = null
     }
 
     companion object {

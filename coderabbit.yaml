@@ -3,11 +3,13 @@ language: en-US
 reviews:
   profile: assertive
   high_level_summary: true
+  high_level_summary_placeholder: "@coderabbitai summary"
   review_status: true
   commit_status: true
   collapse_walkthrough: true
   changed_files_summary: true
   sequence_diagrams: false
+  request_changes_workflow: false
   auto_review:
     enabled: true
     drafts: false
@@ -22,6 +24,27 @@ reviews:
     - '!**/intermediates/**'
     - '!**/outputs/**'
     - '!**/tmp/**'
+    - '!*.md'
+  path_instructions:
+    - path: "core-network/**"
+      instructions: |
+        Focus on performance, threading, memory usage, and Android battery optimization.
+        Check for blocking operations on main thread, proper coroutine usage,
+        connection pooling, and efficient resource cleanup.
+
+    - path: "core-service/**"
+      instructions: |
+        Focus on foreground service lifecycle, notification stability, and Android API restrictions.
+        Verify proper service lifecycle management, notification requirements (API 31+),
+        battery drain prevention, and WorkManager integration where applicable.
+
+    - path: "app/**"
+      instructions: |
+        Focus on UI/UX responsiveness, proper lifecycle handling, state management,
+        and integration between modules. Check for memory leaks and proper Fragment/Activity cleanup.
 
 chat:
   auto_reply: true
+
+knowledge_base:
+  opt_out: false

@@ -31,17 +31,32 @@ reviews:
         Focus on performance, threading, memory usage, and Android battery optimization.
         Check for blocking operations on main thread, proper coroutine usage,
         connection pooling, and efficient resource cleanup.
+        Flag crashes from unhandled network exceptions, timeouts, or null responses.
+        Identify ANRs caused by synchronous network calls or blocking I/O on the main thread.
+        Review concurrency issues such as race conditions, shared mutable state across coroutines,
+        and improper use of dispatchers that could lead to data corruption or deadlocks.
 
     - path: "core-service/**"
       instructions: |
         Focus on foreground service lifecycle, notification stability, and Android API restrictions.
         Verify proper service lifecycle management, notification requirements (API 31+),
         battery drain prevention, and WorkManager integration where applicable.
+        Flag crashes from unhandled exceptions in service callbacks, missing permissions,
+        or improper service binding/unbinding sequences.
+        Identify ANRs from long-running operations in onStartCommand or onBind without offloading to a background thread.
+        Review concurrency issues such as race conditions in shared service state, improper thread synchronization,
+        and unsafe access to service resources from multiple threads.
 
     - path: "app/**"
       instructions: |
         Focus on UI/UX responsiveness, proper lifecycle handling, state management,
         and integration between modules. Check for memory leaks and proper Fragment/Activity cleanup.
+        Flag crashes caused by lifecycle mismanagement (e.g., accessing views after onDestroyView,
+        null context references, or missing null checks after async operations).
+        Identify ANRs from work done on the main/UI thread, including disk I/O, database access,
+        or long computations that should be dispatched to background threads.
+        Review concurrency issues in ViewModels, LiveData/Flow collectors, and async operations,
+        including improper coroutine scope usage and missing cancellation handling.
 
 chat:
   auto_reply: true

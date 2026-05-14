@@ -11,7 +11,7 @@ To keep the design clean and maintainable, we will divide the app into three dis
 | Module Name | Primary Responsibility | Key Android Components |
 | --- | --- | --- |
 | **UI Module (`app`)** | Displays the dashboard and handles user permissions. | Jetpack Compose, Activities |
-| **Network Module (`core-network`)** | Calculates real-time data usage and speed. | `TrafficStats` API, Coroutines |
+| **Network Module (`core-network`)** | Calculates real-time data usage and speed. | `TrafficStats` API, Coroutines |-
 | **Service Module (`core-service`)** | Runs the background tracker and status bar notification. | Foreground Service, Notification Manager |
 
 ---
